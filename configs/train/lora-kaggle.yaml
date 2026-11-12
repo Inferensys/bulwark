@@ -1,0 +1,44 @@
+# B1 LoRA fine-tune on Kaggle's T4 GPUs (16 GB each, fp16; T4 has no native bf16). Same
+# model and effective batch (64) as lora.yaml. With two GPUs, DataParallel splits each
+# batch of 16 across both. Sessions end at 12 h, so training stops itself at 11 h with
+# last.pt saved; the next session (PREVIOUS_KERNELS) resumes from it at the same batch.
+manifest: data/manifest.parquet
+shards: data/shards
+# The heads run's best.pt is picked by 5-fold cross-validation over the train and val
+# subjects (select_folds in heads.yaml; its select.support lists the held-out clips and
+# subjects per label); its final.pt (fixed epoch budget, no selection) is the alternative.
+init: checkpoints/heads-v0/best.pt
+out: checkpoints/b1-lora-v0
+epochs: 3
+batch_size: 16
+grad_accum: 4
+lr: 2.0e-4
+warmup_steps: 500
+lora_blocks: 4
+lora_rank: 16
+# v0 label mask, the same in heads, lora and distill: Drive&Act's attention_direction
+# targets never include 'forward', and off-axis cameras keep only face_visible=1 teacher
+# labels (bulwark/label/run.py). Labels with one class in a stage's training clips are
+# masked per media type anyway (bulwark/train/labels.py; `bulwark coverage` lists them):
+# in v0, context, alertness on video, and phone and drink on images (AUC Distracted
+# Driver v2 gives them positives only).
+mask_labels: [attention_direction, face_visible]
+# Validation (best.pt) at each epoch end only: a pass runs the model over every val clip in
+# the shards. On Kaggle's 2x T4 a pass over the 18,525 v0 val clips took about 6 min
+# (docs/training.md, "Measured for v0"). A pass that starts just before time_limit_minutes
+# still runs to its end; the limit counts from the first step, so the 60 min left of the
+# 12-h session must cover the job's setup and that pass. On v0 the first step of a lora or
+# distill job came 4.0 to 58.5 min into the session, so in the slowest sessions setup plus
+# a pass (5.9 to 6.6 min in the two full runs, with and without AUC Distracted Driver v2)
+# would not fit in those 60 min; a run that needs a second session should lower
+# time_limit_minutes (e.g. --set time_limit_minutes=640). The threaded shard listing is
+# measured in one session so far (the cache of B1 v0's outputs: 185 shards listed in
+# 202 s, setup 3.9 min), and setup varies by session. eval_every stays 0: the 200-step
+# probe projected an epoch at about 67 min and both full runs ended within one session, so
+# the three epoch-end passes choose best.pt, and each pass within an epoch would add about
+# 6 min for a choice made on the few subjects of the val split.
+eval_every: 0
+num_workers: 4
+precision: fp16
+checkpoint_minutes: 15
+time_limit_minutes: 660

@@ -1,0 +1,16 @@
+# Where each dataset lives on the local machine. Manifests store paths relative to these
+# roots, so the same manifest works on a local machine (Apple silicon/MPS or CPU), on
+# Kaggle (/kaggle/input/...) and on Azure.
+roots:
+  auc_v2: "data/raw/auc_v2/v2_cam1_cam2_ split_by_driver"   # the archive's v2 folder (v1 beside it is not used)
+  cew: data/raw/cew
+  dmd: data/raw/dmd/rgb   # unpacked RGB release; archives and link lists sit beside it
+  drive_and_act: data/raw/drive_and_act
+  mrl_eye: data/raw/mrl_eye
+  nthu_ddd: data/raw/nthu_ddd
+  sh17: data/raw/sh17
+  state_farm: data/raw/state_farm
+  uta_rldd: data/raw/uta_rldd
+  yawdd: data/raw/yawdd
+  zenodo_driver: data/raw/zenodo_driver
+  synthetic_wan: data/raw/synthetic_wan

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint and test (Python ${{ matrix.python }}, CPU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.8.17" # the uv that wrote uv.lock
+
+      - name: Check that uv.lock matches pyproject.toml
+        run: uv lock --locked
+
+      # The locked versions, with CPU-only torch from the PyTorch index and without the
+      # CUDA libraries that the Linux torch wheels on PyPI pull in.
+      - name: Install the locked dependencies
+        run: |
+          uv venv --python ${{ matrix.python }}
+          uv export --frozen --no-hashes --no-emit-project --extra dev --extra export \
+            | grep -vE '^(nvidia-|cuda-|triton==)' > "$RUNNER_TEMP/requirements.txt"
+          uv pip install --torch-backend cpu -r "$RUNNER_TEMP/requirements.txt"
+          uv pip install --no-deps -e .
+
+      - name: Lint
+        run: .venv/bin/ruff check .
+
+      - name: Type check
+        run: .venv/bin/python -m mypy bulwark scripts infra
+
+      # Tests that need the V-JEPA code and weights (scripts/fetch_pretrained.sh) are
+      # marked `vjepa` and run locally instead.
+      - name: Test
+        run: .venv/bin/python -m pytest -m "not vjepa"

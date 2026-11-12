@@ -1,0 +1,84 @@
+# Plain names for the tables and lists that scripts/hf_release.py renders into the model
+# cards (release/hf/README.md).
+#
+# outputs: every taxonomy label (bulwark/data/taxonomy.yaml). `name` is what a reader sees
+#   next to the output key in a table; `group` is the row group of the What it detects
+#   table; `list` replaces the name inside a sentence where lower-casing its first letter
+#   would be wrong; `classes` names classes of a categorical output; `note` replaces the
+#   reason in the output's ground-truth cell of the What it detects table, for an output a
+#   reader must not use (head_nod: its v0 labels came from a rule with the pitch sign
+#   reversed, MODEL_CARD.md Limitations). Outputs with the same name are listed once
+#   (gaze_yaw and gaze_pitch are both "Gaze"). `labelled` lists the
+#   media types whose training clips have a label for the output, ground truth or the face
+#   model's, as docs/data-card.md's coverage table counts the train split (a test checks
+#   the two agree); on another media type, E1 only learned to copy B1's output.
+# datasets: the training datasets. `name` is the short name in the gate prompt, lists and
+#   tables (the registry's title otherwise); `first` the name at its first mention in a
+#   card, where it spells out an abbreviation; `note` a sentence under the dataset terms
+#   table that spells out what the registry's summary abbreviates; `cite` the list item
+#   that cites the dataset's paper (a card's Citation section); `archive` a copy of the
+#   official page, linked next to it, for a page that does not answer.
+# views: plain names of the camera views the evaluation holds out (split policy
+#   `holdout_views`).
+
+outputs:
+  eye_openness: {name: Eye openness, group: Eyes, labelled: [video, image]}
+  eyes_closed: {name: Eyes closed, group: Eyes, labelled: [video, image]}
+  perclos: {name: PERCLOS, group: Eyes, labelled: [video]}
+  blink: {name: Blink, group: Eyes, labelled: [video]}
+  mouth_open: {name: Mouth open, group: Mouth, labelled: [video, image]}
+  yawn: {name: Yawn, group: Mouth, labelled: [video]}
+  head_yaw: {name: Head yaw, group: Head, labelled: [video, image]}
+  head_pitch: {name: Head pitch, group: Head, labelled: [video, image]}
+  head_roll: {name: Head roll, group: Head, labelled: [video, image]}
+  gaze_yaw: {name: Gaze, group: Eyes}
+  gaze_pitch: {name: Gaze, group: Eyes}
+  head_nod: {name: Head nod, group: Head, labelled: [video], note: "wrong in v0, do not use"}
+  attention_direction: {name: Attention direction, group: Head, labelled: [video]}
+  hands_on_controls: {name: Hands on controls, group: Hands and objects}
+  phone: {name: Phone, group: Hands and objects, labelled: [video, image]}
+  phone_at_ear: {name: Phone at ear, group: Hands and objects, labelled: [video, image]}
+  food: {name: Food, group: Hands and objects, labelled: [video]}
+  drink: {name: Drink, group: Hands and objects, labelled: [video, image]}
+  cigarette: {name: Cigarette, group: Hands and objects}
+  eyeglasses: {name: Eyeglasses, group: Hands and objects, labelled: [image]}
+  sunglasses: {name: Sunglasses, group: Hands and objects}
+  face_mask: {name: Face mask, group: Hands and objects}
+  seatbelt: {name: Seat belt, group: Hands and objects}
+  helmet: {name: Safety gear, group: Hands and objects}
+  safety_vest: {name: Safety gear, group: Hands and objects}
+  gloves: {name: Safety gear, group: Hands and objects}
+  alertness: {name: Alertness, group: Activity, labelled: [video]}
+  kss: {name: KSS, list: Karolinska Sleepiness Scale (KSS), group: Activity}
+  activity: {name: Activity, group: Activity, labelled: [video, image]}
+  modality:
+    name: Camera type
+    group: Camera conditions
+    classes: {rgb: RGB colour, nir: near-infrared (NIR), thermal: thermal}
+    labelled: [video, image]
+  low_light: {name: Low light, group: Camera conditions, labelled: [image]}
+  face_visible: {name: Face visible, group: Camera conditions, labelled: [video, image]}
+  face_occluded: {name: Face occluded, group: Camera conditions}
+  context: {name: Scene context, group: Camera conditions, labelled: [video, image]}
+
+datasets:
+  drive_and_act:
+    name: Drive&Act
+    cite: "[Drive&Act: A Multi-Modal Dataset for Fine-Grained Driver Behavior Recognition in Autonomous Vehicles](https://mlanthology.org/iccv/2019/martin2019iccv-drive/) (ICCV 2019)"
+  dmd:
+    name: DMD
+    cite: "[DMD: A Large-Scale Multi-Modal Driver Monitoring Dataset for Attention and Alertness Analysis](https://arxiv.org/abs/2008.12085)"
+  mrl_eye:
+    name: MRL Eye
+    # The official page was unreachable on 2026-10-28, 2026-10-29 and 2026-10-31. This is
+    # the Internet Archive's snapshot of 2026-05-16, which the registry's terms were read from.
+    archive: https://web.archive.org/web/20260516/https://mrl.cs.vsb.cz/eyedataset.html
+    cite: "[MRL Eye: Pupil localization using geodesic distance](https://doi.org/10.1007/978-3-030-03801-4_38) (Fusek, 2018)"
+  auc_v2:
+    name: AUC Distracted Driver v2
+    first: AUC Distracted Driver v2 (from the American University in Cairo, AUC)
+    note: MI-AUC is the Machine Intelligence group at the American University in Cairo, whose licence agreement covers AUC Distracted Driver v2.
+    cite: "[AUC Distracted Driver v2: Driver Distraction Identification with an Ensemble of Convolutional Neural Networks](https://arxiv.org/abs/1901.09097)"
+
+views:
+  inner_mirror: inner-mirror camera

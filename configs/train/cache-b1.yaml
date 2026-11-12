@@ -1,0 +1,23 @@
+# B1 teacher outputs for distillation: the fine-tuned B1 over every shard, storing summary
+# tokens and head logits in their own dir (distill.yaml reads it as `teacher`). meta.json
+# records the init's sha256 and supervised_labels, so a retrained B1 cannot top up an old
+# dir and distillation copies only the outputs B1 was trained on.
+# On Kaggle's 2x T4 the first full run's B1 (trained without AUC Distracted Driver v2)
+# took about 64 min of encoding over its 170 shards (168,877 clips), and B1 v0 about 55 min
+# over the 185 v0 shards (183,355 clips), each in one session (docs/training.md,
+# "Measured for v0").
+# best.pt is picked on the val split's ground-truth labels (its select.support lists the
+# clips and subjects per label); final.pt (the fixed step budget) is the alternative.
+# B1 v0, the released B1 (bulwark.export.release.B1_CHECKPOINT_SHA256), ran from
+# checkpoints/b1-lora-auc into data/features/b1-lora-auc, since the first full run held the
+# paths below; where it still does, pass --set init=checkpoints/b1-lora-auc/best.pt
+# --set features=data/features/b1-lora-auc (docs/training.md, "Measured for v0").
+shards: data/shards
+init: checkpoints/b1-lora-v0/best.pt
+features: data/features/b1-lora-v0
+batch_size: 16
+lora_blocks: 4
+lora_rank: 16
+precision: fp16
+num_workers: 4
+time_limit_minutes: 660

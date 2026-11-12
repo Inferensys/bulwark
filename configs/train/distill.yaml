@@ -1,0 +1,55 @@
+# Bulwark-E1 student from Bulwark-B1 soft targets (teacher dir from cache-b1.yaml).
+# One Kaggle T4, fp16. A 600-step probe on the v0 manifest, over the 170 shards without
+# AUC Distracted Driver v2 and with the first full run's B1 outputs as teacher (no logits
+# for AUC v2), so on 118,840 train clips, ran at 1.03-1.07 s per optimizer step: 4 epochs
+# of those clips take about 4.3 h plus their validation passes (docs/training.md,
+# "Measured for v0"). With B1 v0's outputs, which add AUC's 12,638 train images (131,478
+# clips per epoch), the full E1 v0 run took 16,432 steps at a median 0.91 s, about 4.3 h
+# with its validation passes (in two sessions, the first limited to 210 minutes). The run
+# stops itself at 11 h with last.pt saved, and the next session resumes from it. best.pt
+# is chosen on the val split's ground-truth labels.
+# Batch 8 x 16 frames with grad_accum 4 (effective 32): batch 8 peaked at 5.2 GB allocated
+# on the T4, so batch 32 x 16 frames would not fit in its 16 GB.
+# multi_gpu is off: DataParallel over Kaggle's two T4s took 11.8 s per step against 1.2 s on
+# one, and the two-GPU runs were killed for host memory before step 150. DataParallel runs
+# every forward in new threads, and torch 2.11 keeps cuDNN conv plans per thread (and does
+# not free them), so most likely all of EfficientViT-B1's convolutions are planned afresh on
+# each forward; B1 has one convolution and does not show it.
+multi_gpu: false
+manifest: data/manifest.parquet
+shards: data/shards
+# E1 v0 must learn from B1 v0's outputs (bulwark.export.release.B1_CHECKPOINT_SHA256; the
+# release refuses graphs distilled from another B1). Where the first full run's outputs hold
+# this path, pass --set teacher=data/features/b1-lora-auc (cache-b1.yaml).
+teacher: data/features/b1-lora-v0
+# augment (on by default) is photometric only here: the teacher logits describe full clips.
+out: checkpoints/e1-v0
+epochs: 4
+batch_size: 8
+grad_accum: 4
+lr: 1.0e-3
+edge_backbone: efficientvit_b1.r224_in1k
+edge_img_size: 224
+distill_weight: 1.0
+# v0 label mask, the same in heads, lora and distill: Drive&Act's attention_direction
+# targets never include 'forward', and off-axis cameras keep only face_visible=1 teacher
+# labels (bulwark/label/run.py). Labels with one class in a stage's training clips are
+# masked per media type anyway (bulwark/train/labels.py; `bulwark coverage` lists them):
+# in v0, context, alertness on video, and phone and drink on images (AUC Distracted
+# Driver v2 gives them positives only).
+mask_labels: [attention_direction, face_visible]
+# Validation (best.pt) at each epoch end only: a pass runs the model over every val clip in
+# the shards (211 s on one T4 for the v0 val split; log.jsonl records it as `seconds` in each
+# val event). A pass that starts just before time_limit_minutes still runs to its end; the
+# limit counts from the first step, so the 60 min left of the 12-h session must cover the
+# job's setup and that pass. In the two v0 distill probes the first step came 57.1 and
+# 58.5 min into the session, so setup plus a 211-s pass would not fit in those 60 min; a run
+# that needs a second session should lower time_limit_minutes (e.g.
+# --set time_limit_minutes=640). The threaded shard listing is measured in one session so
+# far (the cache of B1 v0's outputs: 185 shards listed in 202 s, setup 3.9 min), and setup
+# varies by session.
+eval_every: 0
+num_workers: 4
+precision: fp16
+checkpoint_minutes: 15
+time_limit_minutes: 660

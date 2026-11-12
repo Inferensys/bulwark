@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# Run one Bulwark job on an A100 VM that deletes itself when done (the backup to Kaggle for
+# B1; on-demand unless BULWARK_PRIORITY=Spot, see env.sh).
+#   infra/azure/run_job.sh lora configs/train/lora.yaml --hours 4
+#   infra/azure/run_job.sh cache configs/train/cache-b1.yaml --hours 2
+#   infra/azure/run_job.sh evaluate checkpoints/b1-lora-v0/best.pt --hours 2 --model b1 --precision bf16
+# Spend: the job first reserves (hours + finish window) x (hourly price + disk/IP) against
+# the cap in BULWARK_CAP_USD and is refused if that would pass it (spend.py).
+# The VM fetches the manifest, the shards and only the checkpoint and feature paths the
+# job reads or writes (infra/job_inputs.py), and syncs what it writes to Blob every 5
+# minutes. When the job ends, fails, or the hours run out, it syncs once more, leaves a
+# jobs/<name>.exit marker and deletes itself; an Azure auto-shutdown at the end of the
+# finish window backs that up. A rerun resumes from the synced checkpoints. If a launch
+# step fails once the VM exists, the VM is deleted again.
+# `evaluate` runs `bulwark evaluate --checkpoint <checkpoint> [options]`; the checkpoint
+# must be in Blob under checkpoints/ (upload.sh), and the report goes to runs/<vm-name>
+# unless --out says otherwise. Name the model kind with --model (b1, e1 or onnx read the
+# shards; heads or logits read --features, default data/features/frozen), since the VM
+# fetches features only for those. --reference is refused (compare the downloaded
+# predictions locally with `bulwark report`), and so are --shards and --manifest other
+# than the defaults.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
+source "$HERE/env.sh"
+[ $# -ge 2 ] || {
+  echo "usage: run_job.sh <job> <config> [--hours N] [--set key=value ...] | run_job.sh evaluate <checkpoint> [--hours N] [options]" >&2
+  exit 2
+}
+JOB=$1; CONFIG=$2; shift 2
+HOURS=4
+EXTRA=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --hours) HOURS=$2; shift 2 ;;
+    --hours=*) HOURS=${1#--hours=}; shift ;;
+    *) EXTRA+=("$1"); shift ;;
+  esac
+done
+case "$HOURS" in ''|*[!0-9.]*) echo "--hours must be a number: $HOURS" >&2; exit 2 ;; esac
+NAME="bulwark-$JOB-$(date +%m%d%H%M)"
+PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
+if [ "$JOB" = evaluate ]; then
+  case " ${EXTRA[*]-} " in *" --out "*|*" --out="*) ;; *) EXTRA+=(--out "runs/$NAME") ;; esac
+  COMMAND=(.venv/bin/bulwark evaluate --checkpoint "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"})
+else
+  COMMAND=(.venv/bin/bulwark train "$JOB" --config "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"})
+fi
+# What the job reads and writes besides the manifest and shards; this also stops an
+# unknown job, a missing config or a path outside the repo before anything is reserved.
+INPUTS=$(cd "$ROOT" && "$PYTHON" infra/job_inputs.py "$JOB" "$CONFIG" ${EXTRA[@]+"${EXTRA[@]}"}) || exit 2
+READS=""; WRITES=""
+while read -r kind path; do
+  printf -v quoted '%q' "$path"
+  case "$kind" in read) READS+=" $quoted" ;; write) WRITES+=" $quoted" ;; esac
+done <<<"$INPUTS"
+SPEND="$HERE/spend.sh"
+UV_VERSION=0.8.17   # the uv that wrote uv.lock
+FINISH_SECONDS=$(( BULWARK_FINISH_MINUTES * 60 ))
+# Private scratch space: the cloud-init script below holds a SAS.
+TMP=$(umask 077; mktemp -d "${TMPDIR:-/tmp}/bulwark-job.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+
+"$SPEND" reserve "$NAME" "$JOB" "$HOURS"
+# A launch step failed. Without a VM, free the reservation. With one, delete it: its
+# identity or auto-shutdown may be missing, so it might never stop billing on its own.
+release() {
+  local code=0
+  az vm show -g "$BULWARK_RG" -n "$NAME" -o none 2>/dev/null || code=$?
+  if [ "$code" = 3 ]; then
+    "$SPEND" release "$NAME" && echo "Released the reservation for $NAME (VM not created)." >&2
+    return
+  fi
+  echo "Launch of $NAME failed after the VM was created; deleting it." >&2
+  if [ -n "${SAS:-}" ]; then  # lets spend.sh reconcile charge the minutes it ran
+    echo launch-failed | azcopy copy --from-to PipeBlob "$BASE/jobs/$NAME.exit?$SAS" >/dev/null 2>&1 || true
+  fi
+  "$HERE/teardown.sh" "$NAME" || echo "Could not delete $NAME; it bills until deleted: infra/azure/teardown.sh $NAME" >&2
+}
+trap release ERR
+
+# Valid through the deadline and the finish window, plus an hour of margin; no delete right.
+SAS=$("$HERE/sas.sh" "$(python3 -c "import math; print(math.ceil($HOURS + $FINISH_SECONDS / 3600) + 1)")")
+KEY="${BULWARK_SSH_KEY:-$HERE/.ssh/bulwark_ed25519}"
+[ -f "$KEY" ] || { mkdir -p "$(dirname "$KEY")"; ssh-keygen -q -t ed25519 -N "" -f "$KEY"; }
+BASE="https://$BULWARK_STORAGE.blob.core.windows.net/$BULWARK_CONTAINER"
+DEADLINE=$(python3 -c "import time; print(int(time.time() + $HOURS * 3600))")
+RUN=$(printf '%q ' "${COMMAND[@]}")
+
+# Ship the code (not data, weights or the venv), with its provenance record.
+"$ROOT/scripts/pack_code.sh" "$TMP/code.tgz"
+azcopy copy "$TMP/code.tgz" "$BASE/code/$NAME.tgz?$SAS" --overwrite=true >/dev/null
+
+cat > "$TMP/cloud-init.sh" <<INIT
+#!/usr/bin/env bash
+# Generated by infra/azure/run_job.sh for $NAME. No xtrace: the SAS and the managed-identity
+# token must never reach the log, which status.sh prints.
+set -uo pipefail
+umask 077
+export HOME=\${HOME:-/root}   # cloud-init runs this without HOME
+exec > /var/log/bulwark-job.log 2>&1
+BASE="$BASE"; SAS="$SAS"
+WORK=/mnt/bulwark; mkdir -p \$WORK; cd \$WORK
+export AZCOPY_LOG_LOCATION=\$WORK/.azcopy AZCOPY_JOB_PLAN_LOCATION=\$WORK/.azcopy
+IMDS=http://169.254.169.254/metadata
+VM=\$(curl -sf --max-time 10 -H Metadata:true "\$IMDS/instance/compute/resourceId?api-version=2021-02-01&format=text")
+# Checkpoint and feature paths the job reads, and the directories it writes (job_inputs.py).
+READS=($READS)
+WRITES=($WRITES)
+
+log() { echo "[\$(date -u +%FT%TZ)] \$*"; }
+up() {  # up <dir> [seconds]: sync a local dir to Blob (not the pretrained weights, nor files
+  # still being written: *.tmp, and the *.tmp.npz predictions of `bulwark evaluate`)
+  [ -d "\$1" ] || return 0
+  if timeout "\${2:-1800}" azcopy sync "\$1" "\$BASE/\$1?\$SAS" --recursive --exclude-path pretrained --exclude-pattern '*.tmp;*.tmp.npz' >/dev/null; then
+    log "synced \$1"
+  else
+    log "sync of \$1 failed"
+  fi
+}
+up_all() { for dir in \${WRITES[@]+"\${WRITES[@]}"}; do up "\$dir" "\$@"; done; }
+down() {  # down <path>: copy a file or directory from Blob to the same path here
+  mkdir -p "\$(dirname "\$1")"
+  azcopy copy "\$BASE/\$1?\$SAS" "\$(dirname "\$1")" --recursive >/dev/null
+}
+arm() {  # arm <method> <suffix>: one ARM request on this VM; prints the HTTP status
+  local token
+  token=\$(curl -sf --max-time 30 -H Metadata:true "\$IMDS/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' 2>/dev/null)
+  curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X "\$1" -H "Authorization: Bearer \$token" -H "Content-Length: 0" "https://management.azure.com\$VM\$2?api-version=2024-07-01"
+}
+
+# Whatever happens (done, crashed, out of time): save what the job wrote, leave an exit marker,
+# and delete this VM through its managed identity so it stops billing. Runs once, and
+# within the finish window (about 20 minutes at most).
+finish() {
+  set +e
+  mkdir /run/bulwark-finish 2>/dev/null || return 0
+  log "finishing: \$1"
+  up_all 300
+  echo "\$1" | timeout 60 azcopy copy --from-to PipeBlob "\$BASE/jobs/$NAME.exit?\$SAS" >/dev/null || log "exit marker upload failed"
+  [ -n "\$VM" ] || VM=\$(curl -sf --max-time 10 -H Metadata:true "\$IMDS/instance/compute/resourceId?api-version=2021-02-01&format=text")
+  for attempt in 1 2 3 4 5; do   # a new role assignment can take minutes to apply
+    code=\$(arm DELETE "")
+    log "delete request \$attempt: HTTP \$code"
+    case \$code in 200|202|204) return 0 ;; esac
+    [ \$attempt -lt 5 ] && sleep \$(( attempt * 30 ))
+  done
+  # Deallocating stops compute billing; the disk and IP bill until teardown.sh removes them.
+  for attempt in 1 2 3; do
+    code=\$(arm POST /deallocate)
+    log "deallocate request \$attempt: HTTP \$code"
+    case \$code in 200|202) return 0 ;; esac
+    sleep 30
+  done
+  # Last resort only: a guest shutdown leaves the VM allocated and billing until the Azure
+  # auto-shutdown at the end of the finish window deallocates it.
+  log "could not delete or deallocate this VM; run infra/azure/teardown.sh $NAME"
+  shutdown -h now
+}
+trap 'finish "exit \$?"' EXIT
+( sleep \$(( $DEADLINE - \$(date +%s) )); finish deadline ) &
+set -e
+
+log "installing azcopy and uv $UV_VERSION"
+command -v azcopy >/dev/null || (curl -sL https://aka.ms/downloadazcopy-v10-linux | tar -xz --strip-components=1 -C /usr/local/bin --wildcards '*/azcopy')
+curl -LsSf https://astral.sh/uv/$UV_VERSION/install.sh | env UV_UNMANAGED_INSTALL=/usr/local/bin sh
+log "fetching code ($NAME.tgz)"
+azcopy copy "\$BASE/code/$NAME.tgz?\$SAS" code.tgz >/dev/null
+tar -xzf code.tgz
+log "installing the locked dependencies"
+uv sync --frozen --extra export --python 3.11
+# The locked torch must see the GPU: pick_device would otherwise fall back to the CPU
+# and spend the whole reservation there. Stopping here deletes the VM within minutes.
+.venv/bin/python -c 'import sys, torch; print("torch", torch.__version__, "CUDA", torch.version.cuda); sys.exit(0 if torch.cuda.is_available() else 1)' \
+  || { log "CUDA is not available to the locked torch (is the image's NVIDIA driver too old for it?)"; exit 1; }
+scripts/fetch_pretrained.sh
+log "fetching data"
+mkdir -p data/shards checkpoints
+azcopy copy "\$BASE/data/manifest.parquet?\$SAS" data/manifest.parquet >/dev/null
+azcopy sync "\$BASE/data/shards?\$SAS" data/shards --recursive >/dev/null
+for path in \${READS[@]+"\${READS[@]}"}; do
+  { down "\$path" && [ -e "\$path" ]; } || { log "could not fetch \$path, which the job reads"; exit 1; }
+  log "fetched \$path"
+done
+for path in \${WRITES[@]+"\${WRITES[@]}"}; do   # resume after eviction or a rerun
+  if down "\$path" && [ -e "\$path" ]; then log "fetched \$path to resume"; else log "\$path is not in Blob yet; starting fresh"; fi
+done
+# What this run used: code commit, manifest hash, package versions, GPU and driver.
+{ cat PROVENANCE.json; sha256sum data/manifest.parquet; uv pip freeze; nvidia-smi; } 2>&1 \
+  | azcopy copy --from-to PipeBlob "\$BASE/jobs/$NAME.environment.txt?\$SAS" >/dev/null || log "environment record upload failed"
+( while true; do sleep 300; up_all; done ) &
+log "running: bulwark $JOB"
+$RUN
+echo done | azcopy copy --from-to PipeBlob "\$BASE/jobs/$NAME.done?\$SAS" >/dev/null
+log "job finished"
+INIT
+
+# Spot never bills above the max price; on-demand bills the list price. NIC and OS disk go
+# with the VM. The system identity starts with no role; it gets rights on this VM's own
+# resources below, and nothing else.
+if [ "$BULWARK_PRIORITY" = Spot ]; then
+  PRIORITY=(--priority Spot --eviction-policy Delete --max-price "$BULWARK_SPOT_MAX_PRICE")
+else
+  PRIORITY=(--priority Regular)
+fi
+az vm create -g "$BULWARK_RG" -n "$NAME" -l "$BULWARK_LOCATION" --size "$BULWARK_VM_SIZE" \
+  --image "$BULWARK_IMAGE" "${PRIORITY[@]}" \
+  --nic-delete-option Delete --os-disk-delete-option Delete --assign-identity "[system]" \
+  --admin-username bulwark --ssh-key-values "$KEY.pub" --public-ip-sku Standard \
+  --nsg-rule NONE --os-disk-size-gb 128 --custom-data "$TMP/cloud-init.sh" \
+  --tags bulwark-job="$JOB" bulwark-hours="$HOURS" bulwark-deadline="$DEADLINE" -o none
+
+# Backstop first: if self-deletion fails, Azure deallocates the VM at the end of the finish
+# window, so compute stops billing even if a later step here fails.
+SHUTDOWN=$(( DEADLINE + FINISH_SECONDS ))
+az vm auto-shutdown -g "$BULWARK_RG" -n "$NAME" \
+  --time "$(date -u -r "$SHUTDOWN" +%H%M 2>/dev/null || date -u -d "@$SHUTDOWN" +%H%M)" -o none
+
+INFO=$(az vm show -g "$BULWARK_RG" -n "$NAME" -o tsv \
+  --query "[id, identity.principalId, networkProfile.networkInterfaces[0].id, storageProfile.osDisk.managedDisk.id]")
+VM_ID=$(sed -n 1p <<<"$INFO"); PRINCIPAL=$(sed -n 2p <<<"$INFO")
+NIC_ID=$(sed -n 3p <<<"$INFO"); DISK_ID=$(sed -n 4p <<<"$INFO")
+NIC=$(az network nic show --ids "$NIC_ID" -o tsv \
+  --query "[ipConfigurations[0].name, ipConfigurations[0].publicIPAddress.id]")
+IPCONFIG=$(sed -n 1p <<<"$NIC"); IP_ID=$(sed -n 2p <<<"$NIC")
+
+# A public IP has no delete option by default, so every self-deleted VM would leave its IP
+# behind, billing. spend.sh reconcile clears leftovers too, once no job is running.
+az network nic ip-config update -g "$BULWARK_RG" --nic-name "${NIC_ID##*/}" -n "$IPCONFIG" \
+  --set publicIPAddress.deleteOption=Delete -o none \
+  || echo "Could not set the public IP's delete option; spend.sh reconcile will remove it later." >&2
+
+# Self-delete rights: Virtual Machine Contributor on the VM, its NIC and its OS disk (the
+# cascade delete needs all three), Network Contributor on its public IP. A loop rather than
+# a function, so a failure here still reaches the ERR trap.
+for grant in "Virtual Machine Contributor|$VM_ID" "Virtual Machine Contributor|$NIC_ID" \
+             "Virtual Machine Contributor|$DISK_ID" "Network Contributor|$IP_ID"; do
+  [ -n "${grant#*|}" ] || continue
+  az role assignment create --assignee-object-id "$PRINCIPAL" --assignee-principal-type ServicePrincipal \
+    --role "${grant%%|*}" --scope "${grant#*|}" -o none
+done
+trap - ERR
+echo "Started $NAME: at most $HOURS h of training, then up to $BULWARK_FINISH_MINUTES min to sync and delete itself."
+echo "Watch: infra/azure/status.sh $NAME   Spend: infra/azure/spend.sh status"

@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: >-
+  If you use Bulwark, please cite it as below, and also cite the upstream models
+  (docs/references.md) and every dataset the model you use was trained on
+  (docs/datasets.md).
+title: "Bulwark: a base video model for the state of a person on camera"
+abstract: >-
+  Research code for a base video model that predicts fatigue, distraction, attention
+  and risky actions of a person on camera from short clips. Bulwark-B1 adapts a frozen
+  V-JEPA 2.1 ViT-B/16 encoder with LoRA and multi-task heads; Bulwark-E1 is an
+  EfficientViT-B1 student distilled from B1 and exported to ONNX.
+type: software
+version: 0.1.0
+date-released: 2026-11-13
+authors:
+  - name: Inferensys
+repository-code: "https://github.com/Inferensys/bulwark"
+url: "https://github.com/Inferensys/bulwark"
+license: Apache-2.0
+keywords:
+  - driver monitoring
+  - drowsiness detection
+  - distraction detection
+  - video understanding
+  - multi-task learning
+  - knowledge distillation

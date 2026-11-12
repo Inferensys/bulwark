@@ -1,0 +1,104 @@
+# Bulwark label taxonomy.
+#
+# Every training clip carries a sparse subset of these labels. Missing labels are
+# ignored by the loss, so a dataset only has to provide what it actually annotates.
+#
+# kinds:
+#   binary      - probability target in [0, 1]
+#   regression  - float target, already normalised to roughly [-1, 1] or [0, 1]
+#   categorical - one class from `classes`
+#
+# optional fields:
+#   metadata: true  - describes the recording (camera, lighting, setting), not the person,
+#                     and is usually constant within a dataset or view. Scoring it measures
+#                     dataset identity, so evaluation reports it as a sanity check only.
+#   unit, unit_scale - a regression target times unit_scale is a value in `unit`
+#                     (e.g. head_yaw 0.5 -> 45 deg), for reporting errors in natural units.
+version: 1
+
+heads:
+  signals:
+    eye_openness: {kind: regression, range: [0, 1], doc: "Mean eye openness over the clip (0 closed, 1 wide open)."}
+    eyes_closed: {kind: binary, doc: "Eyes closed in more than half of the frames in the last half of the clip (bulwark/data/label_rules.py)."}
+    perclos:
+      kind: regression
+      range: [0, 1]
+      doc: >-
+        Fraction of the clip's frames with the eyes closed. This is a clip-level closure
+        fraction; PERCLOS in the drowsiness literature averages it over a rolling window of
+        a minute or more, which bulwark.inference.RollingMean computes from consecutive
+        clips (60 s by default).
+    blink: {kind: binary, doc: "At least one blink inside the clip."}
+    mouth_open: {kind: regression, range: [0, 1], doc: "Mean mouth opening (normalised MAR)."}
+    yawn: {kind: binary, doc: "A yawn happens inside the clip."}
+    head_yaw: {kind: regression, range: [-1, 1], unit: deg, unit_scale: 90, doc: "Head yaw / 90 degrees in the camera frame, positive = subject turns to their left."}
+    head_pitch: {kind: regression, range: [-1, 1], unit: deg, unit_scale: 90, doc: "Head pitch / 90 degrees in the camera frame, positive = head tipped down."}
+    head_roll: {kind: regression, range: [-1, 1], unit: deg, unit_scale: 90, doc: "Head roll / 90 degrees in the camera frame."}
+    gaze_yaw: {kind: regression, range: [-1, 1], unit: deg, unit_scale: 90, doc: "Gaze yaw / (pi/2) in the camera frame."}
+    gaze_pitch: {kind: regression, range: [-1, 1], unit: deg, unit_scale: 90, doc: "Gaze pitch / (pi/2) in the camera frame."}
+    head_nod: {kind: binary, doc: "Head drops and recovers (nodding off)."}
+    attention_direction:
+      kind: categorical
+      classes: [forward, left, right, up, down, down_center, away]
+      doc: >-
+        Coarse direction of visual attention relative to the task (road, machine, screen).
+        Head-pose teachers measure in the camera frame, so their values are used only for
+        cameras that roughly face the person (bulwark/label/run.py).
+    hands_on_controls:
+      kind: categorical
+      classes: [both, one, none]
+      doc: "Hands on the steering wheel, joystick or machine controls."
+
+  # Held objects are about the person's use of them: a cup in a holder is not `drink`.
+  # Worn items are about the person, not other people in view.
+  objects:
+    phone: {kind: binary, doc: "The person holds or uses a phone during the clip."}
+    phone_at_ear: {kind: binary, doc: "The person holds a phone at their ear."}
+    food: {kind: binary, doc: "The person holds, prepares or eats food during the clip."}
+    drink: {kind: binary, doc: "The person holds, opens or drinks from a cup, can or bottle during the clip."}
+    cigarette: {kind: binary, doc: "The person holds or smokes a cigarette or e-cigarette."}
+    eyeglasses: {kind: binary, doc: "The person wears clear glasses."}
+    sunglasses: {kind: binary, doc: "The person wears sunglasses."}
+    face_mask: {kind: binary, doc: "The person wears a face mask."}
+    seatbelt: {kind: binary, doc: "The person wears a fastened seat belt."}
+    helmet: {kind: binary, doc: "The person wears a hard hat or helmet."}
+    safety_vest: {kind: binary, doc: "The person wears a high-visibility vest."}
+    gloves: {kind: binary, doc: "The person wears work gloves."}
+
+  state:
+    alertness:
+      kind: categorical
+      classes: [alert, low_vigilance, drowsy, microsleep]
+      doc: "Ordinal alertness level."
+    kss: {kind: regression, range: [0, 1], unit: KSS points, unit_scale: 8, doc: "Karolinska Sleepiness Scale (1-9) mapped to (KSS - 1) / 8; a source that gives a KSS range uses its midpoint."}
+    activity:
+      kind: categorical
+      classes:
+        - attentive
+        - looking_away
+        - phone_call
+        - texting
+        - eating
+        - drinking
+        - smoking
+        - talking
+        - reaching
+        - grooming
+        - adjusting_controls
+        - reading
+        - interacting_object
+        - other
+      doc: "Main secondary activity of the person in the clip."
+
+  condition:
+    modality:
+      kind: categorical
+      classes: [rgb, nir, thermal]
+      metadata: true
+    low_light: {kind: binary, metadata: true}
+    face_visible: {kind: binary, metadata: true, doc: "The person's face is in view (not cropped out or turned fully away)."}
+    face_occluded: {kind: binary}
+    context:
+      kind: categorical
+      classes: [vehicle_cabin, industrial_vehicle, workplace, desk, outdoor, other]
+      metadata: true

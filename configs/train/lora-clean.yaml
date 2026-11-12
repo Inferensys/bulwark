@@ -1,0 +1,32 @@
+# Clean chain, step 3 (Azure A100 backup): lora.yaml on commercially usable data only,
+# from the clean heads, into its own out dir. Refuses an init without commercial_only: true.
+manifest: data/manifest.parquet
+shards: data/shards
+# The heads run's best.pt is picked by 5-fold cross-validation over the train and val
+# subjects (select_folds in heads-clean.yaml; its select.support lists the held-out clips
+# and subjects per label); its final.pt (fixed epoch budget, no selection) is the
+# alternative.
+init: checkpoints/heads-clean/best.pt
+out: checkpoints/b1-lora-clean
+commercial_only: true
+epochs: 3
+batch_size: 32
+grad_accum: 2
+lr: 2.0e-4
+warmup_steps: 500
+lora_blocks: 4
+lora_rank: 16
+# Label mask, the same in heads-clean, lora-clean and distill-clean, and the same as the v0
+# configs, so both chains train the same outputs. The commercially usable datasets
+# (open_images and synthetic_wan today) are not in FRONTAL_FACE_VIEWS, so their face-teacher
+# labels keep only face_visible=1 and no attention_direction (bulwark/label/run.py). Labels
+# with one class in a stage's training clips are masked per media type anyway
+# (bulwark/train/labels.py).
+mask_labels: [attention_direction, face_visible]
+# Validation (best.pt) at each epoch end only, as on Kaggle: a pass runs the encoder over
+# every val clip in the shards, and its cost is not measured yet (log.jsonl records it as
+# `seconds` in each val event).
+eval_every: 0
+num_workers: 8
+precision: bf16
+checkpoint_minutes: 15

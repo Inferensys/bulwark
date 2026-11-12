@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Inferensys/bulwark/security/advisories/new
+    about: Please report security problems privately, not as an issue (see SECURITY.md).
+  - name: Commercially licensed models
+    url: https://inferensys.com/contact
+    about: The released weights are for non-commercial research only. Ask Inferensys about commercially licensed models.
+  - name: Bulwark-B1 weights and access
+    url: https://huggingface.co/Inferensys/bulwark-b1-driver-monitoring
+    about: Bulwark-B1's weights, model card and access form are on Hugging Face; its Community tab takes questions about them.
+  - name: Bulwark-E1 weights and access
+    url: https://huggingface.co/Inferensys/bulwark-e1-driver-monitoring-onnx
+    about: Bulwark-E1's ONNX graphs, model card and access form. E1 v0 is a research preview that scores well below B1; its Community tab takes questions about it.

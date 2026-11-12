@@ -1,0 +1,79 @@
+# The Hugging Face collection that groups the Bulwark models
+# (`scripts/hf_release.py collection`). The command creates it private and keeps it
+# private; at launch, once the repository of every released model (launch.yaml) is
+# public, `collection --public` adds the items marked at_launch and makes it public
+# (RELEASING.md, launch order). The items of a model that launch.yaml does not release,
+# its model item and the papers marked `for` it, are deferred: every run leaves them out
+# and removes them from the collection if they are there, until the model is released.
+# An item is a model (`model: b1` or `e1`), a space or a paper (`id`, its Hub id). The
+# Hub's limits: title 60 characters, description 150, each note 500. The first three
+# items the collection holds are the ones the organisation page previews: at launch, the
+# demo Space, B1 and E1.
+
+namespace: Inferensys
+title: "Bulwark: driver drowsiness and distraction detection models"
+description: >-
+  Research models that detect signs of driver drowsiness and distraction. Non-commercial
+  weights. Commercially licensed models: inferensys.com/contact
+# The collection's address, which `collection` prints once it exists. The cards link to it
+# ({{ collection_link }}) and render an *at release* item until it is set here.
+url: https://huggingface.co/collections/Inferensys/bulwark-driver-drowsiness-and-distraction-detection-models-6ae51c90bc0ad7416e14bb59
+
+items:
+  # The demo Space goes first once it exists: the models launched on 2026-11-13 without
+  # it, since a Gradio Space under the Inferensys organisation needs a paid Hugging Face
+  # plan. Uncomment this item, with the Space's real id, then run `collection --public`
+  # (RELEASING.md, launch order).
+  # - type: space
+  #   id: Inferensys/bulwark-demo
+  #   at_launch: true
+  #   note: >-
+  #     Bulwark demo: runs Bulwark-B1 v0 or Bulwark-E1 v0 on AI-generated example clips of
+  #     a driver and shows the outputs of each 2-second window. Research preview, not
+  #     certified. Weights: CC BY-NC 4.0, non-commercial research only.
+  - type: model
+    model: b1
+    note: >-
+      Bulwark-B1, the base video model: Meta's V-JEPA 2.1 encoder with LoRA adapters. From a 2-second clip of a camera facing the driver, it detects
+      eyes closed, PERCLOS, blinks, yawns, phone use, eating and drinking, and the driver's
+      activity. Research preview: indicative results on 3 test people per dataset; not
+      certified or tested against the EU General Safety Regulation or Euro NCAP. Weights:
+      CC BY-NC 4.0, non-commercial research only. Commercially licensed models:
+      https://inferensys.com/contact
+  # Deferred while launch.yaml does not release E1.
+  - type: model
+    model: e1
+    note: >-
+      Bulwark-E1, the CPU model: an EfficientViT-B1 student distilled from Bulwark-B1 and
+      exported to ONNX, as a 16-frame video graph and a 1-frame image graph. E1 v0 is a
+      research preview that scores well below B1: use it to try CPU deployment, and B1
+      for research. Licence and caveats as B1: CC BY-NC 4.0, non-commercial research
+      only. Commercially licensed models: https://inferensys.com/contact
+  - type: paper
+    id: "2008.12085"
+    note: >-
+      DMD, the Driver Monitoring Dataset (Vicomtech): one of Bulwark's four training
+      datasets and its source of blink and yawn ground truth. Academic use only
+      (CC BY-NC-ND 4.0).
+  - type: paper
+    id: "2603.14482"
+    note: >-
+      V-JEPA 2.1 (Meta): the self-supervised video encoder that Bulwark-B1 builds on. B1
+      uses Meta's ViT-B/16 checkpoint with LoRA adapters. Meta publishes it in its V-JEPA 2
+      repository, which is under the MIT License and states no separate licence for its
+      checkpoints.
+  # E1's backbone: deferred with E1 while it is not released.
+  - type: paper
+    id: "2205.14756"
+    for: e1
+    note: >-
+      EfficientViT (MIT Han Lab): the backbone of Bulwark-E1, initialised from timm's
+      ImageNet-1k weights (timm/efficientvit_b1.r224_in1k, Apache-2.0).
+  # The Hub has no page for this paper until a public card cites it.
+  - type: paper
+    id: "1901.09097"
+    at_launch: true
+    note: >-
+      AUC Distracted Driver dataset paper: one of Bulwark's four training datasets
+      (non-commercial licence agreement; use limited to distracted-driver detection
+      research).

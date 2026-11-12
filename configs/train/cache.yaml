@@ -1,0 +1,13 @@
+# The frozen V-JEPA 2.1 encoder over every shard -> data/features/frozen (summary tokens
+# only). Kaggle T4: fp16 (no native bf16); with two GPUs each batch is split across both.
+# On Kaggle's 2x T4 the 170 shards without AUC Distracted Driver v2 (168,877 clips) took
+# about 51 min of encoding in one session of about 70 min, and AUC's 15 shards 98 s of
+# encoding in a separate session of about 4 min (docs/training.md, "Measured for v0").
+# Resumes shard by shard; once 11 h have passed it stops after the shard in progress, and
+# the next session continues with the shards left.
+shards: data/shards
+features: data/features/frozen
+batch_size: 16
+precision: fp16
+num_workers: 4
+time_limit_minutes: 660

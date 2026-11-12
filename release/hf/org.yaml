@@ -1,0 +1,10 @@
+# Settings of the Inferensys organisation page on Hugging Face, entered by hand at launch
+# (RELEASING.md, launch order); `scripts/hf_release.py org-card` prints them. The card
+# itself is release/hf/org-card.md.
+
+# The short description, which the Hub also uses as the page's meta description. The form's
+# length limit is not documented; shorten it if the form refuses it.
+details: >-
+  Inference Systems (Inferensys) builds production AI for enterprise teams. Here: Bulwark
+  driver monitoring research models. Commercially licensed models: inferensys.com
+website: https://inferensys.com

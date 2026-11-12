@@ -1,0 +1,38 @@
+# Clean chain, step 3 (Kaggle): lora-kaggle.yaml on commercially usable data only, from the
+# clean heads, into its own out dir. Refuses an init without commercial_only: true.
+manifest: data/manifest.parquet
+shards: data/shards
+# The heads run's best.pt is picked by 5-fold cross-validation over the train and val
+# subjects (select_folds in heads-clean.yaml; its select.support lists the held-out clips
+# and subjects per label); its final.pt (fixed epoch budget, no selection) is the
+# alternative.
+init: checkpoints/heads-clean/best.pt
+out: checkpoints/b1-lora-clean
+commercial_only: true
+epochs: 3
+batch_size: 16
+grad_accum: 4
+lr: 2.0e-4
+warmup_steps: 500
+lora_blocks: 4
+lora_rank: 16
+# Label mask, the same in heads-clean, lora-clean and distill-clean, and the same as the v0
+# configs, so both chains train the same outputs. The commercially usable datasets
+# (open_images and synthetic_wan today) are not in FRONTAL_FACE_VIEWS, so their face-teacher
+# labels keep only face_visible=1 and no attention_direction (bulwark/label/run.py). Labels
+# with one class in a stage's training clips are masked per media type anyway
+# (bulwark/train/labels.py).
+mask_labels: [attention_direction, face_visible]
+# Validation (best.pt) at each epoch end only: a pass runs the model over every val clip in
+# the shards, so its time grows with the val split: on Kaggle's 2x T4 a pass over the
+# 18,525 v0 val clips took about 6 min (docs/training.md, "Measured for v0"). A pass that
+# starts just before time_limit_minutes still runs to its end; the limit counts from the
+# first step, so the 60 min left of the 12-h session must cover the job's setup and that
+# pass. In the slowest v0 sessions they would not have (lora-kaggle.yaml gives the
+# numbers), so a run that needs a second session should lower time_limit_minutes (e.g.
+# --set time_limit_minutes=640). eval_every stays 0, as in lora-kaggle.yaml.
+eval_every: 0
+num_workers: 4
+precision: fp16
+checkpoint_minutes: 15
+time_limit_minutes: 660

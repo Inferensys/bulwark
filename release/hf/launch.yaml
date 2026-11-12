@@ -1,0 +1,16 @@
+# The models this launch releases on Hugging Face: the one list that scripts/hf_release.py
+# keys the release off (release/hf/README.md, "Release set").
+#
+# A model left out keeps its repository private. `open`, `stage --public` and
+# `upload --public` refuse it, and an upload of it stays an untagged private preview. No
+# staged card, full card or organisation card may name its repository: the templates'
+# {{#released <model>}} blocks drop the lines that link it, and their
+# {{#unreleased <model>}} blocks say it is in development instead. The collection leaves
+# out its items (its model item, and the papers marked `for` it in collection.yaml) and
+# removes them if they are there.
+#
+# Bulwark-B1 v0 and Bulwark-E1 v0 launch together. E1 v0 is a research preview that scores
+# well below B1, released on the maintainers' decision after its test results; its card
+# says so on its first screen. Each card links the other model's repository, so one `open`
+# run opens both (RELEASING.md, "Launch order").
+released: [b1, e1]

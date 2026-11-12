@@ -1,0 +1,22 @@
+# Clean chain, step 2: heads on frozen features (cache.yaml; the frozen V-JEPA encoder has
+# seen no Bulwark data), trained on commercially usable datasets only.
+# best.pt is picked by 5-fold cross-validation over the train and val subjects, as in
+# heads.yaml (select_folds, bulwark/train/train_heads.py); `--set select_folds=0` picks it
+# on the val split instead.
+manifest: data/manifest.parquet
+features: data/features/frozen
+out: checkpoints/heads-clean
+commercial_only: true
+epochs: 20
+batch_size: 256
+lr: 1.0e-3
+warmup_steps: 200
+select_folds: 5
+num_workers: 0
+# Label mask, the same in heads-clean, lora-clean and distill-clean, and the same as the v0
+# configs, so both chains train the same outputs. The commercially usable datasets
+# (open_images and synthetic_wan today) are not in FRONTAL_FACE_VIEWS, so their face-teacher
+# labels keep only face_visible=1 and no attention_direction (bulwark/label/run.py). Labels
+# with one class in a stage's training clips are masked per media type anyway
+# (bulwark/train/labels.py).
+mask_labels: [attention_direction, face_visible]

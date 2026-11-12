@@ -1,0 +1,36 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+# Fetched or generated (third_party and checkpoints/pretrained may be symlinks).
+/third_party
+/checkpoints/
+/runs/
+# Everything under data/ is downloaded or generated (raw sets, manifests, shards, labels,
+# features), and most source datasets forbid redistribution.
+/data/
+# Local, untracked notes and pages (never published).
+/ops/
+/docs/local/
+
+# Secrets and per-machine settings.
+.env
+.env.*
+!.env.example
+kaggle.json
+*.pem
+*.key
+infra/azure/.ssh/
+infra/azure/ledger.*
+infra/azure/env.local.sh
+infra/azure/.spend_start
+
+# Model files and tables belong in data/, checkpoints/ or a release, never in a commit.
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.parquet

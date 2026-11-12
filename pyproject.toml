@@ -1,0 +1,115 @@
+[build-system]
+requires = ["hatchling>=1.27"]  # 1.27: SPDX licence expressions (PEP 639)
+build-backend = "hatchling.build"
+
+[project]
+# The import package and the CLI are `bulwark`; the distribution name avoids an unrelated
+# "bulwark" project on PyPI.
+name = "inferensys-bulwark"
+version = "0.1.0"
+description = "Research video model for driver monitoring systems: eye closure, PERCLOS, blinks, yawns, phone use, eating, drinking and activity from a 2-second in-cabin clip."
+readme = "README.md"
+requires-python = ">=3.10"
+# Covers the code only: Inferensys's under Apache-2.0, and Meta's V-JEPA 2.1 encoder code
+# vendored in bulwark/model/vjepa21 under MIT. Model weights carry their own licence (see
+# MODEL_CARD.md).
+license = "Apache-2.0 AND MIT"
+license-files = ["LICENSE", "NOTICE", "bulwark/model/vjepa21/LICENSE"]
+authors = [{ name = "Inferensys" }]
+keywords = [
+  "driver monitoring",
+  "drowsiness",
+  "distraction",
+  "fatigue",
+  "video",
+  "v-jepa",
+  "multi-task",
+  "distillation",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+  "numpy>=1.24,<3",
+  "opencv-python>=4.8",
+  "pandas>=2.2",
+  "pillow>=10",
+  "pyarrow>=16",
+  "pyyaml>=6.0",
+  "rich>=13.7",
+  "safetensors>=0.4",
+  "timm>=1.0,<2",
+  "torch>=2.6,<3",  # 2.6 fixed a bypass of torch.load(weights_only=True) (CVE-2025-32434)
+  "torchvision>=0.21,<1",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+label = ["mediapipe>=0.10.30"]
+vlm = ["mlx-vlm>=0.3; sys_platform == 'darwin'"]
+detect = ["rfdetr>=1.2"]
+export = [
+  "onnx>=1.16",
+  # onnxruntime 1.24 dropped Python 3.10 wheels but still declares support for it.
+  "onnxruntime>=1.18,<1.24; python_version < '3.11'",
+  "onnxruntime>=1.18; python_version >= '3.11'",
+]
+dev = ["mypy>=1.10", "pytest>=8.2", "ruff>=0.5"]
+# Command-line tools for the Kaggle scripts (infra/kaggle), the UTA-RLDD download and the
+# Hugging Face weights release (scripts/hf_release.py).
+ops = ["gdown>=5", "huggingface-hub>=1.0", "kaggle>=1.6"]
+
+[project.urls]
+Homepage = "https://github.com/Inferensys/bulwark"
+Repository = "https://github.com/Inferensys/bulwark"
+Documentation = "https://github.com/Inferensys/bulwark/tree/main/docs"
+Issues = "https://github.com/Inferensys/bulwark/issues"
+Changelog = "https://github.com/Inferensys/bulwark/blob/main/CHANGELOG.md"
+"Model weights (B1)" = "https://huggingface.co/Inferensys/bulwark-b1-driver-monitoring"
+
+[project.scripts]
+bulwark = "bulwark.cli:app"
+
+[tool.hatch.build.targets.wheel]
+# bulwark/model/vjepa21 (Meta's V-JEPA 2.1 encoder code and its MIT LICENSE) is part of the
+# package, so an installed wheel can build B1 without a clone of facebookresearch/vjepa2.
+packages = ["bulwark"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# Meta's vendored encoder code keeps its own style (bulwark/model/vjepa21/__init__.py).
+extend-exclude = ["third_party", "bulwark/model/vjepa21"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["third_party/"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# Meta's vendored encoder code is untyped (bulwark/model/vjepa21/__init__.py).
+[[tool.mypy.overrides]]
+module = ["bulwark.model.vjepa21", "bulwark.model.vjepa21.*"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "vjepa: needs the pretrained V-JEPA weights, and third_party/vjepa2 for the vendored-code parity test (scripts/fetch_pretrained.sh); CI deselects these",
+]

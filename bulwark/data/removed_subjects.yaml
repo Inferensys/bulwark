@@ -1,0 +1,8 @@
+# Subjects removed at their own or the data provider's request (for example a GDPR
+# erasure request, or participants a provider dropped from a later release). Ids are
+# "<dataset>:<subject>" as in the manifest, each with the date of the request and where it
+# came from. See bulwark/data/removals.py for what a removal does.
+#
+# removed:
+#   dmd:gX_0: {date: YYYY-MM-DD, source: "provider release diff"}
+removed: {}

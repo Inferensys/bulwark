@@ -1,0 +1,72 @@
+Bulwark
+Copyright 2026 Inferensys
+
+This product includes software developed by Inferensys and is licensed under the
+Apache License, Version 2.0 (see LICENSE).
+
+The Apache-2.0 licence covers the source code in this repository only. It does not
+cover model weights or datasets. Bulwark model weights are released under their own
+terms (see MODEL_CARD.md), and every dataset keeps its own licence (see docs/datasets.md).
+
+Third-party components
+----------------------
+
+Only the V-JEPA 2 code below is vendored in this repository. The other components are
+downloaded at install or run time. Each remains under its own licence. Weights or files
+derived from them that Inferensys redistributes are listed with the release that
+contains them.
+
+V-JEPA 2 code
+  https://github.com/facebookresearch/vjepa2 at commit
+  204698b45b3712590f06245fbfba32d3be539812. MIT License, Copyright (c) Meta Platforms,
+  Inc. and affiliates. The V-JEPA 2.1 ViT-B encoder definition (vit_base and the modules
+  it uses, from app/vjepa_2_1/models/ and two helpers from src/) is vendored in
+  bulwark/model/vjepa21, trimmed to what the encoder needs, with Meta's copyright
+  headers and the MIT licence text (bulwark/model/vjepa21/LICENSE); each file's header
+  says what changed. scripts/fetch_pretrained.sh also clones the repository at that
+  commit into third_party/vjepa2, which only the test comparing the vendored code with
+  Meta's uses. Three files in that repository (src/datasets/utils/video/randaugment.py,
+  src/datasets/utils/video/randerase.py, src/datasets/utils/worker_init_fn.py) are under
+  the Apache License 2.0; none of them is vendored.
+
+V-JEPA 2.1 ViT-B/16 checkpoint
+  https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitb_dist_vitG_384.pt, published by
+  Meta in the V-JEPA 2 repository, whose licence is the MIT License, Copyright (c) Meta
+  Platforms, Inc. and affiliates; the repository states no separate licence for its
+  checkpoints. Bulwark-B1 training checkpoints contain the LoRA adapters and heads trained
+  by Bulwark and the encoder's final output norm, fine-tuned from this checkpoint; they
+  do not contain the rest of the encoder, which users download themselves. A Bulwark-B1
+  release written by bulwark release (bulwark.inference.save_release,
+  examples/make_release.py) contains the full encoder weights, derived from this
+  checkpoint with the LoRA adapters merged in, and ships the MIT licence text with
+  Meta's copyright notice as LICENSE-vjepa2.
+
+timm and EfficientViT-B1 weights
+  timm (https://github.com/huggingface/pytorch-image-models), Apache License 2.0.
+  Bulwark-E1 is initialised from timm's efficientvit_b1.r224_in1k weights, Apache
+  License 2.0 per the model card (https://huggingface.co/timm/efficientvit_b1.r224_in1k),
+  trained on ImageNet-1k. EfficientViT (https://github.com/mit-han-lab/efficientvit) is
+  by MIT Han Lab, Apache License 2.0. Redistributed Bulwark-E1 weights are modified from
+  these weights: Inferensys trained them further on Bulwark's training data, with
+  distillation from Bulwark-B1.
+
+MediaPipe Face Landmarker (teacher model, optional)
+  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task,
+  Google. The model cards of its Face Mesh V2 and Blendshape V2 components state the
+  Apache License 2.0. Used only to produce training labels.
+
+RF-DETR (teacher model, optional)
+  https://github.com/roboflow/rf-detr, Roboflow. The rfdetr package and the Nano,
+  Small and Medium detection models used here are under the Apache License 2.0. Used
+  only to produce training labels.
+
+Qwen3-VL-4B-Instruct (teacher model, optional)
+  https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct, Qwen team, Apache License 2.0 per
+  its model card, run through the MLX conversion
+  https://huggingface.co/mlx-community/Qwen3-VL-4B-Instruct-4bit (Apache License 2.0
+  per its model card). Used only to produce training labels.
+
+Wan2.2-TI2V-5B (synthetic data generator, optional)
+  https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B, Apache License 2.0. Its model card
+  claims no rights over generated content and lists use restrictions that users of
+  scripts/synth_wan.py must follow.

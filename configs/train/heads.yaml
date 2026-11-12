@@ -1,0 +1,22 @@
+# Heads on cached features (cache.yaml). Runs on a local machine (Apple silicon/MPS or
+# CPU) or a Kaggle T4.
+# best.pt is picked by 5-fold cross-validation over the train and val subjects
+# (select_folds, bulwark/train/train_heads.py): the val split alone has 2 Drive&Act
+# drivers, 2 DMD subjects and 3 MRL Eye subjects. Five extra heads models train before the
+# main run. `--set select_folds=0` picks best.pt on the val split instead.
+manifest: data/manifest.parquet
+features: data/features/frozen
+out: checkpoints/heads-v0
+epochs: 20
+batch_size: 256
+lr: 1.0e-3
+warmup_steps: 200
+select_folds: 5
+num_workers: 0
+# v0 label mask, the same in heads, lora and distill: Drive&Act's attention_direction
+# targets never include 'forward', and off-axis cameras keep only face_visible=1 teacher
+# labels (bulwark/label/run.py). Labels with one class in a stage's training clips are
+# masked per media type anyway (bulwark/train/labels.py; `bulwark coverage` lists them):
+# in v0, context, alertness on video, and phone and drink on images (AUC Distracted
+# Driver v2 gives them positives only).
+mask_labels: [attention_direction, face_visible]

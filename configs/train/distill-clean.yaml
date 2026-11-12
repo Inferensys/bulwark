@@ -1,0 +1,39 @@
+# Clean chain, step 5: E1 distilled from the commercially clean B1 (cache-b1-clean.yaml).
+# The training settings of distill.yaml (label mask and eval_every included); only the
+# teacher, out and commercial_only differ. The student's backbone starts from timm's
+# ImageNet-1k weights (edge_backbone); check those terms too before a commercial release.
+manifest: data/manifest.parquet
+shards: data/shards
+teacher: data/features/b1-lora-clean
+# augment (on by default) is photometric only here: the teacher logits describe full clips.
+out: checkpoints/e1-clean
+commercial_only: true
+epochs: 4
+batch_size: 8
+grad_accum: 4
+lr: 1.0e-3
+edge_backbone: efficientvit_b1.r224_in1k
+edge_img_size: 224
+distill_weight: 1.0
+# One GPU, as distill.yaml: DataParallel over two T4s made each step about ten times slower
+# and ran out of host memory (see distill.yaml).
+multi_gpu: false
+# Label mask, the same in heads-clean, lora-clean and distill-clean, and the same as the v0
+# configs, so both chains train the same outputs. The commercially usable datasets
+# (open_images and synthetic_wan today) are not in FRONTAL_FACE_VIEWS, so their face-teacher
+# labels keep only face_visible=1 and no attention_direction (bulwark/label/run.py). Labels
+# with one class in a stage's training clips are masked per media type anyway
+# (bulwark/train/labels.py).
+mask_labels: [attention_direction, face_visible]
+# Validation (best.pt) at each epoch end only: a pass runs the model over every val clip in
+# the shards (211 s on one T4 for the v0 val split; log.jsonl records it as `seconds` in each
+# val event). A pass that starts just before time_limit_minutes still runs to its end; the
+# limit counts from the first step, so the 60 min left of the 12-h session must cover the
+# job's setup and that pass. In the slowest v0 sessions they would not have (distill.yaml
+# gives the numbers), so a run that needs a second session should lower time_limit_minutes
+# (e.g. --set time_limit_minutes=640).
+eval_every: 0
+num_workers: 4
+precision: fp16
+checkpoint_minutes: 15
+time_limit_minutes: 660

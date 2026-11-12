@@ -1,0 +1,13 @@
+# Clean chain, step 4: teacher outputs of the commercially clean B1 (lora-clean.yaml).
+# commercial_only refuses an init that does not record commercial_only: true.
+shards: data/shards
+# best.pt is picked on val ground truth; final.pt (fixed step budget) is the alternative.
+init: checkpoints/b1-lora-clean/best.pt
+features: data/features/b1-lora-clean
+commercial_only: true
+batch_size: 16
+lora_blocks: 4
+lora_rank: 16
+precision: fp16
+num_workers: 4
+time_limit_minutes: 660

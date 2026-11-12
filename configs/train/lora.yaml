@@ -1,0 +1,29 @@
+# End-to-end LoRA fine-tune on Azure (the backup to Kaggle, see lora-kaggle.yaml): A100 80GB.
+manifest: data/manifest.parquet
+shards: data/shards
+# The heads run's best.pt is picked by 5-fold cross-validation over the train and val
+# subjects (select_folds in heads.yaml; its select.support lists the held-out clips and
+# subjects per label); its final.pt (fixed epoch budget, no selection) is the alternative.
+init: checkpoints/heads-v0/best.pt
+out: checkpoints/b1-lora-v0
+epochs: 3
+batch_size: 32
+grad_accum: 2
+lr: 2.0e-4
+warmup_steps: 500
+lora_blocks: 4
+lora_rank: 16
+# v0 label mask, the same in heads, lora and distill: Drive&Act's attention_direction
+# targets never include 'forward', and off-axis cameras keep only face_visible=1 teacher
+# labels (bulwark/label/run.py). Labels with one class in a stage's training clips are
+# masked per media type anyway (bulwark/train/labels.py; `bulwark coverage` lists them):
+# in v0, context, alertness on video, and phone and drink on images (AUC Distracted
+# Driver v2 gives them positives only).
+mask_labels: [attention_direction, face_visible]
+# Validation (best.pt) at each epoch end only, as on Kaggle: a pass runs the encoder over
+# every val clip in the shards, and its cost is not measured yet (log.jsonl records it as
+# `seconds` in each val event).
+eval_every: 0
+num_workers: 8
+precision: bf16
+checkpoint_minutes: 15
